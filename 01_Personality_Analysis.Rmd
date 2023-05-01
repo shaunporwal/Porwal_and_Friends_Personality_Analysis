@@ -1,0 +1,226 @@
+---
+title: "01_Personality_Analysis"
+output: html_document
+date: "2023-04-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+
+library(poorman)
+library(dplyr)
+library(reshape2)
+library(ggplot2)
+```
+
+# Load in Data
+```{r}
+
+df_personality_scores <-
+  readr::read_csv(
+    file = 'data/shaun_justin_will_scores.csv',
+    show_col_types = FALSE) |> 
+  janitor::clean_names(case = "all_caps") |> # uppercase col names
+  mutate_if(lubridate::is.POSIXt, lubridate::as_date) |>   # use lubridates
+  mutate_all(toupper) |> 
+  as.data.frame()
+
+```
+
+
+```{r}
+
+df_personality_scores_long <- melt(df_personality_scores, id.vars = "NAME", variable.name = "trait", value.name = "score")
+
+ggplot(df_personality_scores_long, aes(x = NAME, y = score, fill = trait)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(
+    title = "Personality Trait Comparison",
+    x = "Name",
+    y = "Score"
+  ) + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+```
+
+
+```{r}
+
+
+# Reshape the data to long format
+df_personality_scores_long <- melt(df_personality_scores, id.vars = "NAME", variable.name = "trait", value.name = "score")
+
+# Make sure the score variable is numeric
+df_personality_scores_long$score <- as.numeric(as.character(df_personality_scores_long$score))
+
+# Define the desired order of traits
+ordered_traits <- c(
+  "AGREEABLENESS",
+  "COMPASSION",
+  "POLITENESS",
+  "CONSCIENTIOUSNESS",
+  "INDUSTRIOUSNESS",
+  "ORDERLINESS",
+  "EXTRAVERSION",
+  "ENTHUSIASM",
+  "ASSERTIVENESS",
+  "NEUROTICISM",
+  "WITHDRAWAL",
+  "VOLATILITY",
+  "OPENNESS_TO_EXPERIENCE",
+  "INTELLECT",
+  "AESTHETICS"
+)
+
+# Set the order of the "trait" column in your dataframe
+df_personality_scores_long$trait <- factor(df_personality_scores_long$trait, levels = ordered_traits)
+
+# Create the plot with the ordered traits
+ggplot(df_personality_scores_long, aes(x = trait, y = score, fill = NAME)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)) +
+  labs(
+    title = "Personality Trait Comparison",
+    x = "Personality Trait",
+    y = "Score"
+  ) +
+  scale_y_continuous(breaks = seq(0, 100, by = 10), limits = c(0, 100))
+
+```
+
+```{r}
+
+# Filter the data for each pair of persons
+df_personality_scores_long_pair_1 <-
+  df_personality_scores_long[
+    df_personality_scores_long$NAME %in% c("SHAUN PORWAL", "JUSTIN BU"),
+  ] |> 
+  mutate(
+    pair = 'SHAUN & JUSTIN'
+  )
+
+df_personality_scores_long_pair_2 <- 
+  df_personality_scores_long[
+    df_personality_scores_long$NAME %in% c("SHAUN PORWAL", "WILL CHENG"), 
+  ] |> 
+  mutate(
+    pair = 'SHAUN & WILL'
+  )
+
+df_personality_scores_long_pair_3 <-
+  df_personality_scores_long[
+    df_personality_scores_long$NAME %in% c("JUSTIN BU", "WILL CHENG"), 
+  ] |> 
+  mutate(
+    pair = 'JUSTIN & WILL'
+  )
+
+# Combine the dataframes for each pair
+df_personality_scores_long_pairs <- 
+  rbind(
+    df_personality_scores_long_pair_1,
+    df_personality_scores_long_pair_2,
+    df_personality_scores_long_pair_3
+  )
+
+  row.names(df_personality_scores_long_pairs) <- seq_along(df_personality_scores_long_pairs[,1])
+
+# Create a new column indicating the pairs
+df_personality_scores_long_pairs$pair <- rep(c("SHAUN PORWAL & JUSTIN BU", "SHAUN PORWAL & WILL CHENG", "JUSTIN BU & WILL CHENG"), each = length(ordered_traits)*2)
+
+# Create the plot with the ordered traits and the side-by-side back-to-back bar plots for each pair
+ggplot(df_personality_scores_long_pairs, aes(x = trait, y = score, fill = NAME)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  labs(
+    title = "Personality Trait Comparison",
+    x = "Personality Trait",
+    y = "Score"
+  ) +
+  scale_y_continuous(breaks = seq(0, 100, by = 50), limits = c(0, 100)) +
+  facet_wrap(~ pair, ncol = 1)
+
+
+```
+
+```{r Modify for Stacked Scores}
+
+  # Shaun & Justin
+  df_personality_scores_long_pair_1_stack <- 
+    df_personality_scores_long_pair_1 |> 
+      ungroup() |> 
+      mutate(
+        score_b2b = ifelse(NAME=='SHAUN PORWAL', score, -score),
+        pair = 'SHAUN & JUSTIN'
+      )
+  
+  # Shaun & Will
+  df_personality_scores_long_pair_2_stack <- 
+    df_personality_scores_long_pair_2 |> 
+      ungroup() |> 
+      mutate(
+        score_b2b = ifelse(NAME=='SHAUN PORWAL', score, -score),
+        pair = 'SHAUN & WILL'
+      )
+
+  # Will & Justin
+  df_personality_scores_long_pair_3_stack <-
+    df_personality_scores_long_pair_3 |> 
+      ungroup() |> 
+      mutate(
+        score_b2b = ifelse(NAME=='JUSTIN BU', score, -score),
+        pair = 'WILL & JUSTIN'
+      )
+  
+  df_final_stacked <-
+    bind_rows(
+      df_personality_scores_long_pair_1_stack,
+      df_personality_scores_long_pair_2_stack,
+      df_personality_scores_long_pair_3_stack
+    )
+  
+```
+
+```{r}
+
+# Create the back-to-back bar plot
+ggplot(df_final_stacked, aes(x = trait, y = score_b2b, fill = NAME)) +
+  geom_bar(stat = "identity", position = position_stack(vjust = 0.5), width = 0.5) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  labs(
+    title = "Personality Trait Comparison",
+    x = "Personality Trait",
+    y = "Score"
+  ) +
+  scale_y_continuous(breaks = seq(-100, 100, by = 50), limits = c(-100, 100), labels = abs(seq(-100, 100, by = 50))) +
+  facet_wrap(~ pair, ncol = 1)
+
+```
+
+
+
+
+
+```{r}
+
+purrr::map()
+
+```
+
+
+
+
