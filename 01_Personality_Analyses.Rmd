@@ -1,0 +1,258 @@
+---
+title: "01_Personality_Analyses"
+date: "2023-04-29"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    # includes: 
+      # in_header: "highlight/header.html"
+    # css: "highlight/styles/agate.min.css"
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+```{r Initial Setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, Load in Libraries, include=FALSE}
+library(dplyr)
+library(reshape2)
+library(ggplot2)
+```
+
+```{r Load in Data, include=FALSE}
+
+df_personality_scores <-
+  readr::read_csv(
+    file = 'data/sp_jb_wc_scores.csv',
+    show_col_types = FALSE) |> 
+  janitor::clean_names(case = "all_caps") |> # uppercase col names
+  mutate_if(lubridate::is.POSIXt, lubridate::as_date) |>   # use lubridates
+  mutate_all(toupper) |> 
+  as.data.frame()
+
+```
+
+```{r Data Manipulation Steps, include=FALSE}
+
+df_personality_scores_long <-
+  melt(
+    df_personality_scores,
+    id.vars = "NAME",
+    variable.name = "trait",
+    value.name = "score"
+  )
+
+df_personality_scores_long$score <- as.numeric(as.character(df_personality_scores_long$score))
+
+# Define the desired order of traits
+ordered_traits <- c(
+  "AGREEABLENESS",
+  "COMPASSION",
+  "POLITENESS",
+  "CONSCIENTIOUSNESS",
+  "INDUSTRIOUSNESS",
+  "ORDERLINESS",
+  "EXTRAVERSION",
+  "ENTHUSIASM",
+  "ASSERTIVENESS",
+  "NEUROTICISM",
+  "WITHDRAWAL",
+  "VOLATILITY",
+  "OPENNESS_TO_EXPERIENCE",
+  "INTELLECT",
+  "AESTHETICS"
+)
+
+# Set the order of the "trait" column in your dataframe
+df_personality_scores_long$trait <- factor(df_personality_scores_long$trait, levels = ordered_traits)
+
+```
+
+# Generate Plots
+```{r Gradient Bars, echo=FALSE}
+
+gradient_bars <- 
+  ggplot(df_personality_scores_long, aes(x = NAME, y = score, fill = trait)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(
+    title = "Gradient Bars",
+    x = "Name",
+    y = "Score"
+  ) + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+gradient_bars
+```
+
+```{r Standard Trait Bars, echo=FALSE}
+# Create the plot with the ordered traits
+standard_trait_bars <-
+  ggplot(df_personality_scores_long, aes(x = trait, y = score, fill = NAME)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)) +
+  labs(
+    title = "Personality Trait Comparison",
+    x = "Personality Trait",
+    y = "Score"
+  ) +
+  scale_y_continuous(breaks = seq(0, 100, by = 10), limits = c(0, 100))
+
+standard_trait_bars
+
+```
+
+```{r Facet Stacked Bars, echo=FALSE}
+
+# Filter the data for each pair of persons
+df_personality_scores_long_pair_1 <-
+  df_personality_scores_long[
+    df_personality_scores_long$NAME %in% c("SP", "JB"),
+  ] |> 
+  mutate(
+    pair = 'SP & JB'
+  )
+
+df_personality_scores_long_pair_2 <- 
+  df_personality_scores_long[
+    df_personality_scores_long$NAME %in% c("SP", "WC"), 
+  ] |> 
+  mutate(
+    pair = 'SP & WC'
+  )
+
+df_personality_scores_long_pair_3 <-
+  df_personality_scores_long[
+    df_personality_scores_long$NAME %in% c("JB", "WC"), 
+  ] |> 
+  mutate(
+    pair = 'JB & WC'
+  )
+
+# Combine the dataframes for each pair
+df_personality_scores_long_pairs <- 
+  rbind(
+    df_personality_scores_long_pair_1,
+    df_personality_scores_long_pair_2,
+    df_personality_scores_long_pair_3
+  )
+
+row.names(df_personality_scores_long_pairs) <- seq_along(df_personality_scores_long_pairs[,1])
+
+# Create a new column indicating the pairs
+df_personality_scores_long_pairs$pair <- rep(c("SP & JB", "SP & WC", "JB & WC"), each = length(ordered_traits)*2)
+
+# Create the plot with the ordered traits and the side-by-side back-to-back bar plots for each pair
+facet_stacked_bars <-
+  ggplot(df_personality_scores_long_pairs, aes(x = trait, y = score, fill = NAME)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  labs(
+    title = "Personality Trait Comparison",
+    x = "Personality Trait",
+    y = "Score"
+  ) +
+  scale_y_continuous(breaks = seq(0, 100, by = 50), limits = c(0, 100)) +
+  facet_wrap(~ pair, ncol = 1)
+
+facet_stacked_bars
+
+```
+
+```{r Modify for Stacked Scores, include=FALSE}
+
+# SP & JB
+df_personality_scores_long_pair_1_stack <- 
+  df_personality_scores_long_pair_1 |> 
+  ungroup() |> 
+  mutate(
+    score_b2b = ifelse(NAME=='SP', score, -score),
+    pair = 'SP & JB'
+  )
+
+# SP & WC
+df_personality_scores_long_pair_2_stack <- 
+  df_personality_scores_long_pair_2 |> 
+  ungroup() |> 
+  mutate(
+    score_b2b = ifelse(NAME=='SP', score, -score),
+    pair = 'SP & WC'
+  )
+
+# WC & JB
+df_personality_scores_long_pair_3_stack <-
+  df_personality_scores_long_pair_3 |> 
+  ungroup() |> 
+  mutate(
+    score_b2b = ifelse(NAME=='JB', score, -score),
+    pair = 'WC & JB'
+  )
+
+df_final_stacked <-
+  bind_rows(
+    df_personality_scores_long_pair_1_stack,
+    df_personality_scores_long_pair_2_stack,
+    df_personality_scores_long_pair_3_stack
+  )
+
+```
+
+```{r Stacked Back-to-Back Graphs, echo=FALSE}
+
+stacked_b2b_graphs <-
+  # Create the back-to-back bar plot
+  ggplot(df_final_stacked, aes(x = trait, y = score_b2b, fill = NAME)) +
+  geom_bar(stat = "identity", position = position_stack(vjust = 0.5), width = 0.5) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  labs(
+    title = "Stacked Back-to-Back Graphs",
+    x = "Personality Trait",
+    y = "Score"
+  ) +
+  scale_y_continuous(breaks = seq(-100, 100, by = 50), limits = c(-100, 100), labels = abs(seq(-100, 100, by = 50))) +
+  facet_wrap(~ pair, ncol = 1)
+
+stacked_b2b_graphs
+
+```
+
+```{r Standard Line Plot, echo=FALSE}
+
+standard_line_plots <-
+  ggplot(df_personality_scores_long, aes(x = trait, y = score, group = NAME, color = NAME)) +
+  geom_line() +
+  geom_point() +
+  scale_y_continuous(breaks = seq(0, 100, by = 10)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=0.5)) +
+  labs(x = "Personality Traits", y = "Magnitude (Percentiles)", title = "Standard Line Plot")
+standard_line_plots
+```
+
+```{r Save Out Data and Plots, include=FALSE}
+
+saveRDS(
+  c(df_personality_scores_long,
+    gradient_bars,
+    standard_trait_bars,
+    facet_stacked_bars,
+    stacked_b2b_graphs,
+    standard_line_plots
+  ),
+  file = './results.RData'
+)
+
+```
